@@ -1,0 +1,10 @@
+{
+    "mqttUri": "",
+    "userEmail": "",
+    "productId": "",
+    "token": "",
+    "deviceId": "",
+    "openWeatherMap": {
+        "appId": ""
+    }
+}

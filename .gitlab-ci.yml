@@ -1,0 +1,87 @@
+image: $DOCKER_REGISTRY_PREFIX/2smart/utils/combined-ci-image:buildx
+
+stages:
+  - test
+  - build
+  - release
+  - buildx
+  - staging
+  - release_docker
+  - run_buildx
+
+before_script:
+  - git clone https://oauth2:$ACCESS_TOKEN@$DOCKER_UTILS_REPO_URL
+  - mv docker-utils/utils.sh docker.sh
+
+services:
+  - name: $DOCKER_REGISTRY_PREFIX/2smart/base-images/docker-dind
+    alias: docker
+    command: [ "--experimental" ]
+
+lint:
+   before_script:
+     - npm i
+   stage: test
+   script:
+     - npm run test:lint
+   only:
+     - 'merge_requests'
+     - 'master'
+
+build:
+  stage: build
+  script:
+    - ./docker.sh rundaemon
+    - ./docker.sh build
+    - ./docker.sh push
+    - ./docker.sh push_bridge_type_to_demo
+  only:
+    - 'master'
+
+release:
+  stage: release
+  script:
+    - ./docker.sh rundaemon
+    - ./docker.sh release_bridge_type
+  only:
+    - 'release'
+
+buildx:
+  stage: buildx
+  artifacts:
+    paths:
+      - buildx
+    expire_in: 1 month
+  script:
+    - export DOCKER_BUILDKIT=1
+    - git clone git://github.com/docker/buildx ./docker-buildx
+    - docker build --platform=local -o . ./docker-buildx
+  only:
+    - 'master'
+
+docker_hub_staging:
+  stage: staging
+  when: manual
+  script:
+    - DOCKER_LOGIN=$DOCKER_HUB_ACCOUNT DOCKER_PASSWORD=$DOCKER_HUB_PASSWORD SOURCE_REGISTRY=$DOCKER_HUB_REGISTRY ./docker.sh login
+    - SOURCE_IMAGE=$DOCKER_HUB_IMAGE SOURCE_TAG=$DOCKER_HUB_STAGING_TAG SOURCE_REGISTRY=$DOCKER_HUB_ACCOUNT DOCKERFILE_PATH=$CLOUD_DOCKERFILE_PATH ./docker.sh buildx
+  only:
+    - 'master'
+
+docker_hub_release:
+  stage: release_docker
+  when: manual
+  script:
+    - DOCKER_LOGIN=$DOCKER_HUB_ACCOUNT DOCKER_PASSWORD=$DOCKER_HUB_PASSWORD SOURCE_REGISTRY=$DOCKER_HUB_REGISTRY ./docker.sh login
+    - SOURCE_IMAGE=$DOCKER_HUB_IMAGE SOURCE_TAG=$DOCKER_HUB_STAGING_TAG SOURCE_REGISTRY=$DOCKER_HUB_ACCOUNT TARGET_TAG=$DOCKER_HUB_RELEASE_TAG  ./docker.sh release_buildx
+  only:
+    - 'master'
+
+run_buildx:
+  stage: run_buildx
+  script:
+    - ./docker.sh rundaemon
+    - ./docker.sh login
+    - SOURCE_TAG=$MULTIPLATFORM_TAG ./docker.sh buildx
+  when: manual
+  allow_failure: true

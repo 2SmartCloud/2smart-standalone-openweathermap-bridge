@@ -1,0 +1,18 @@
+FROM node:14-alpine
+
+WORKDIR /app
+
+RUN apk update && \
+    apk add --no-cache \
+        git
+
+COPY config/ config/
+COPY lib/ lib/
+COPY package.json package.json
+COPY package-lock.json package-lock.json
+COPY app.js app.js
+COPY index-cloud.js index-cloud.js
+
+RUN npm ci --production
+
+CMD npm run start:cloud
